@@ -3,6 +3,7 @@
 
 import os
 import tempfile
+from base64 import b64encode
 
 from werkzeug.security import check_password_hash
 
@@ -29,6 +30,16 @@ if app.config.get('HASHED_PASSWORDS', False):
         # if the user doesn't exist, check against the invalid hash anyway to avoid a timing side-channel
         hashed_password = app.config['USERS'].get(username, default_hash)
         return check_password_hash(hashed_password, password)
+
+
+@app.before_request
+def rewrite_auth_params():
+    app.logger.info('in rewrite_auth_params')
+    if ((not request.environ.get('HTTP_AUTHORIZATION', False)) and
+                'username' in request.args and
+                'password' in request.args):
+        username, password = request.args['username'], request.args['password']
+        request.environ['HTTP_AUTHORIZATION'] = 'basic ' + b64encode(username + ':' + password)
 
 
 # Setup logging
@@ -183,7 +194,6 @@ def simple_send_sms():
     if not request.args.has_key('text'):
         return bad_request('missing required params')
 
-    app.logger.debug('request.args: {}'.format(request.args))
     app.logger.debug('to: {}'.format(request.args.getlist('to')))
 
     sms = {
