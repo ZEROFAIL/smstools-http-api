@@ -34,7 +34,6 @@ if app.config.get('HASHED_PASSWORDS', False):
 
 @app.before_request
 def rewrite_auth_params():
-    app.logger.info('in rewrite_auth_params')
     if ((not request.environ.get('HTTP_AUTHORIZATION', False)) and
                 'username' in request.args and
                 'password' in request.args):
