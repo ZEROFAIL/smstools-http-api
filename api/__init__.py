@@ -2,16 +2,24 @@
 # -*- coding: utf-8 -*-
 
 import os
+import re
 import tempfile
 from base64 import b64encode
 
+import lockfile
+import serial
 from werkzeug.security import check_password_hash
 
+import flask
 from flask import Flask
 from flask import jsonify
 from flask import make_response
 from flask import request
 from flask.ext.httpauth import HTTPBasicAuth
+
+CSQ_REGEX = re.compile(r'+CSQ: \d{2},')
+SERIAL_DEVICE = '/dev/ttyUSB3'
+SLOCK = lockfile.LockFile('/var/lock/LCK..{}'.format(SERIAL_DEVICE_PATH))
 
 # initialization
 app = Flask(__name__)
@@ -204,3 +212,26 @@ def simple_send_sms():
 
     result = write_sms(sms)
     return jsonify(result), 201
+
+
+@app.route('/api/v1.0/sms/modem_status', methods=['GET'])
+@auth.login_required
+def modem_status():
+    with SLOCK:
+        try:
+            with serial.Serial(SERIAL_DEVICE, timeout=1) as device:
+                device.write(b'AT+CSQ\r\n')
+                csq = device.readline()
+                ok = device.readline().strip()
+        except serial.SerialException:
+            ok = False
+
+    if not ok:
+        return jsonify({'error': 'modem not available'}), 500
+
+    csq_status = int(CSQ_REGEX.match(csq).group(1) or 0)
+
+    if 10 <= csq_status < 99:
+        return jsonify({'result': 'All OK'}), 200
+    else:
+        return jsonify({'error': 'modem not connected or weak signal'}), 500
