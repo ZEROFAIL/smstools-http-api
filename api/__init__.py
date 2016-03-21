@@ -6,7 +6,7 @@ import re
 import tempfile
 from base64 import b64encode
 
-import lockfile
+import filelock
 import serial
 from werkzeug.security import check_password_hash
 
@@ -17,9 +17,9 @@ from flask import make_response
 from flask import request
 from flask.ext.httpauth import HTTPBasicAuth
 
-CSQ_REGEX = re.compile(r'+CSQ: \d{2},')
+CSQ_REGEX = re.compile(r'+CSQ: (\d{2}),')
 SERIAL_DEVICE = '/dev/ttyUSB3'
-SLOCK = lockfile.LockFile('/var/lock/LCK..{}'.format(SERIAL_DEVICE_PATH))
+SLOCK = filelock.FileLock('/var/lock/LCK..{}'.format(SERIAL_DEVICE_PATH))
 
 # initialization
 app = Flask(__name__)
