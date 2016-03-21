@@ -18,8 +18,9 @@ from flask import request
 from flask.ext.httpauth import HTTPBasicAuth
 
 CSQ_REGEX = re.compile(r'\+CSQ: (\d{2}),')
-SERIAL_DEVICE = '/dev/ttyUSB3'
-SLOCK = filelock.FileLock('/var/lock/LCK..{}'.format(SERIAL_DEVICE_PATH))
+SERIAL_DEVICE = 'ttyUSB3'
+SERIAL_DEVICE_PATH = '/dev/{}'.format(SERIAL_DEVICE)
+SLOCK = filelock.FileLock('/var/lock/LCK..{}'.format(SERIAL_DEVICE))
 
 # initialization
 app = Flask(__name__)
@@ -219,7 +220,7 @@ def simple_send_sms():
 def modem_status():
     with SLOCK:
         try:
-            with serial.Serial(SERIAL_DEVICE, timeout=1) as device:
+            with serial.Serial(SERIAL_DEVICE_PATH, timeout=1) as device:
                 device.write(b'AT+CSQ\r\n')
                 csq = device.readline()
                 ok = device.readline().strip()
