@@ -218,14 +218,17 @@ def simple_send_sms():
 @app.route('/api/v1.0/sms/modem_status', methods=['GET'])
 @auth.login_required
 def modem_status():
-    with SLOCK:
-        try:
-            with serial.Serial(SERIAL_DEVICE_PATH, timeout=1) as device:
-                device.write(b'AT+CSQ\r\n')
-                csq = device.readline()
-                ok = device.readline().strip()
-        except serial.SerialException:
-            ok = False
+    try:
+        with SLOCK.acquire(timeout=20):
+            try:
+                with serial.Serial(SERIAL_DEVICE_PATH, timeout=1) as device:
+                    device.write(b'AT+CSQ\r\n')
+                    csq = device.readline()
+                    ok = device.readline().strip()
+            except serial.SerialException:
+                ok = False
+    except filelock.Timeout:
+        ok = False
 
     if not ok:
         return jsonify({'error': 'modem not available'}), 500
