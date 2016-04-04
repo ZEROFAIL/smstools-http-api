@@ -218,6 +218,7 @@ def simple_send_sms():
 @app.route('/api/v1.0/sms/modem_status', methods=['GET'])
 @auth.login_required
 def modem_status():
+    csq = None
     try:
         with SLOCK.acquire(timeout=20):
             try:
@@ -233,7 +234,12 @@ def modem_status():
     if not ok:
         return jsonify({'error': 'modem not available'}), 500
 
-    csq_status = int(CSQ_REGEX.match(csq).group(1) or 0)
+    csq_match = CSQ_REGEX.match(csq)
+    if csq_match is None:
+        app.logger.info("csq ( {} ) didn't match regex ( {} )".format(csq, CSQ_REGEX))
+        csq_status = 0
+    else:
+        csq_status = int(CSQ_REGEX.match(csq).group(1) or 0)
 
     if 10 <= csq_status < 99:
         return jsonify({'result': 'All OK'}), 200
