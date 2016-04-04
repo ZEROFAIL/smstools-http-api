@@ -21,6 +21,7 @@ CSQ_REGEX = re.compile(r'\+CSQ: (\d{1,2}),')
 SERIAL_DEVICE = 'ttyUSB3'
 SERIAL_DEVICE_PATH = '/dev/{}'.format(SERIAL_DEVICE)
 SLOCK = filelock.FileLock('/var/lock/LCK..{}'.format(SERIAL_DEVICE))
+SMSD_PID_PATH = '/var/run/smstools/smsd.pid'
 
 # initialization
 app = Flask(__name__)
@@ -248,3 +249,16 @@ def modem_status():
     else:
         app.logger.warning("CSQ result: %s", csq)
         return jsonify({'error': 'modem not connected or weak signal'}), 500
+
+
+@app.route('/api/v1.0/sms/smsd_status', methods=['GET'])
+@auth.login_required
+def smsd_status():
+    with open(SMSD_PID_PATH, 'r') as pidfile:
+        pid = int(pidfile.read().strip())
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            return jsonify({'error': 'smsd not running!'}), 500
+        else:
+            return jsonify({'result': 'All OK'}), 200
