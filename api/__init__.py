@@ -4,6 +4,7 @@
 import os
 import re
 import tempfile
+import time
 from base64 import b64encode
 
 import filelock
@@ -20,8 +21,10 @@ from flask.ext.httpauth import HTTPBasicAuth
 CSQ_REGEX = re.compile(r'\+CSQ: (\d{1,2}),')
 SERIAL_DEVICE = 'ttyUSB3'
 SERIAL_DEVICE_PATH = '/dev/{}'.format(SERIAL_DEVICE)
+SERIAL_DEVICE_RESET_PATH = '/dev/ttyUSB2'
 SLOCK = filelock.FileLock('/var/lock/LCK..{}'.format(SERIAL_DEVICE))
 SMSD_PID_PATH = '/var/run/smstools/smsd.pid'
+MODEM_RESET_TIMESTAMP_PATH = '../modem_last_reset'
 
 # initialization
 app = Flask(__name__)
@@ -31,6 +34,53 @@ auth = HTTPBasicAuth()
 
 # Read config file
 app.config.from_object('config')
+
+
+def get_modem_reset_file():
+    created = False
+    try:
+        reset_file = open(MODEM_RESET_TIMESTAMP_PATH, 'r+')
+    except IOError:
+        reset_file = open(MODEM_RESET_TIMESTAMP_PATH, 'w')
+        created = True
+
+    return reset_file, created
+
+
+def perform_reset():
+    try:
+        with SLOCK.acquire(timeout=20):
+            try:
+                with serial.Serial(SERIAL_DEVICE_RESET_PATH, timeout=1) as device:
+                    device.write(b'AT!GRESET\r\n')
+                app.logger.info('reset modem')
+            except serial.SerialException as e:
+                app.logger.warning('attempted to reset serial device but was unable to connect: %s', e)
+    except filelock.Timeout:
+        app.logger.warning('perform_reset: unable to obtain lock for serial device')
+
+
+def reset_modem():
+    now = time.time()
+    reset_file, created = get_modem_reset_file()
+    last = None
+
+    with reset_file:
+        if created:
+            last = 0
+        else:
+            last_from_file = reset_file.read()
+            try:
+                last = float(last_from_file.strip())
+            except ValueError:
+                last = 0
+
+        if now - last > app.config.get('MODEM_MINIMUM_RESET_INTERVAL', 300):
+            perform_reset()
+            reset_file.seek(0)
+            reset_file.write(time.time())
+            reset_file.truncate()
+
 
 if app.config.get('HASHED_PASSWORDS', False):
     iterations = app.config.get('DEFAULT_HASH_ITERATIONS', 10000)
@@ -226,6 +276,8 @@ def modem_status():
                 with serial.Serial(SERIAL_DEVICE_PATH, timeout=1) as device:
                     device.write(b'AT+CSQ\r\n')
                     csq = device.readline()
+                    if csq.startswith(b'AT'):  # we got an echo
+                        csq = device.readline()
                     ok = device.readline().strip()
             except serial.SerialException as e:
                 app.logger.warning("unable to read from serial device: %s", e)

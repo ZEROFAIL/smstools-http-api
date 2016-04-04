@@ -25,3 +25,7 @@ USERS = {
 #MOBILE_PERMS = {
 #    'lvv': [ '911' ],
 #}
+
+# Minimum length of time, in seconds, to wait between attempts to reset the modem
+# default: 300
+MODEM_MINIMUM_RESET_INTERVAL = 180
