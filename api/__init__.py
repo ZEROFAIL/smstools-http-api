@@ -227,10 +227,10 @@ def modem_status():
                     csq = device.readline()
                     ok = device.readline().strip()
             except serial.SerialException as e:
-                logger.warning("unable to read from serial device: %s", e)
+                app.logger.warning("unable to read from serial device: %s", e)
                 ok = False
     except filelock.Timeout as e:
-        logger.warning("couldn't obtain lock for serial device: %s", e)
+        app.logger.warning("couldn't obtain lock for serial device: %s", e)
         ok = False
 
     if not ok:
@@ -246,5 +246,5 @@ def modem_status():
     if 10 <= csq_status < 99:
         return jsonify({'result': 'All OK'}), 200
     else:
-        logger.warning("CSQ result: %s", csq)
+        app.logger.warning("CSQ result: %s", csq)
         return jsonify({'error': 'modem not connected or weak signal'}), 500
