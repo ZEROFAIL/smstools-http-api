@@ -17,7 +17,7 @@ from flask import make_response
 from flask import request
 from flask.ext.httpauth import HTTPBasicAuth
 
-CSQ_REGEX = re.compile(r'\+CSQ: (\d{2}),')
+CSQ_REGEX = re.compile(r'\+CSQ: (\d{1,2}),')
 SERIAL_DEVICE = 'ttyUSB3'
 SERIAL_DEVICE_PATH = '/dev/{}'.format(SERIAL_DEVICE)
 SLOCK = filelock.FileLock('/var/lock/LCK..{}'.format(SERIAL_DEVICE))
@@ -236,7 +236,7 @@ def modem_status():
 
     csq_match = CSQ_REGEX.match(csq)
     if csq_match is None:
-        app.logger.info("csq ( {} ) didn't match regex ( {} )".format(csq, CSQ_REGEX))
+        app.logger.info("csq ( {} ) didn't match regex ( {} )".format(csq, CSQ_REGEX.pattern))
         csq_status = 0
     else:
         csq_status = int(CSQ_REGEX.match(csq).group(1) or 0)
