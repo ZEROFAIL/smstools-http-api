@@ -75,6 +75,8 @@ def reset_modem():
             except ValueError:
                 last = 0
 
+        app.logger.info('last modem reset: %d', last)
+
         if now - last > app.config.get('MODEM_MINIMUM_RESET_INTERVAL', 300):
             perform_reset()
             reset_file.seek(0)
