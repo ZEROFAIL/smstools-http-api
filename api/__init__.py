@@ -54,7 +54,7 @@ def perform_reset():
     app.logger.info('resetting modem...')
     try:
         with SLOCK.acquire(timeout=20):
-            subprocess.call((RESET_MODEM,))
+            subprocess.Popen((RESET_MODEM,))
     except filelock.Timeout:
         app.logger.warning('perform_reset: unable to obtain lock for serial device')
 
@@ -301,6 +301,8 @@ def modem_status():
         return jsonify({'result': 'All OK'}), 200
     else:
         app.logger.warning("CSQ result: %s", csq)
+        if csq_status == 99:
+            reset_modem()
         return jsonify({'error': 'modem not connected or weak signal'}), 500
 
 
