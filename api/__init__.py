@@ -3,6 +3,7 @@
 
 import os
 import re
+import subprocess
 import tempfile
 import time
 from base64 import b64encode
@@ -26,6 +27,8 @@ SLOCK = filelock.FileLock('/var/lock/LCK..{}'.format(SERIAL_DEVICE))
 SMSD_PID_PATH = '/var/run/smstools/smsd.pid'
 MODEM_RESET_TIMESTAMP_PATH = '../modem_last_reset'
 
+RESET_MODEM = '/opt/httpapi/reset_modem.sh'
+
 # initialization
 app = Flask(__name__)
 
@@ -48,14 +51,10 @@ def get_modem_reset_file():
 
 
 def perform_reset():
+    app.logger.info('resetting modem...')
     try:
         with SLOCK.acquire(timeout=20):
-            try:
-                with serial.Serial(SERIAL_DEVICE_RESET_PATH, timeout=1) as device:
-                    device.write(b'AT!GRESET\r\n')
-                app.logger.info('reset modem')
-            except serial.SerialException as e:
-                app.logger.warning('attempted to reset serial device but was unable to connect: %s', e)
+            subprocess.call((RESET_MODEM,))
     except filelock.Timeout:
         app.logger.warning('perform_reset: unable to obtain lock for serial device')
 
