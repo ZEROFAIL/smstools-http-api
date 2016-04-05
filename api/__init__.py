@@ -80,7 +80,7 @@ def reset_modem():
         if now - last > app.config.get('MODEM_MINIMUM_RESET_INTERVAL', 300):
             perform_reset()
             reset_file.seek(0)
-            reset_file.write(time.time())
+            reset_file.write(str(time.time()))
             reset_file.truncate()
 
 
