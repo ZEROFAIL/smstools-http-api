@@ -12,7 +12,6 @@ import filelock
 import serial
 from werkzeug.security import check_password_hash
 
-import flask
 from flask import Flask
 from flask import jsonify
 from flask import make_response
@@ -20,6 +19,7 @@ from flask import request
 from flask.ext.httpauth import HTTPBasicAuth
 
 CSQ_REGEX = re.compile(r'\+CSQ: (\d{1,2}),')
+CREG_REGEX = re.compile(r'\+CREG: (\d),\d')
 SERIAL_DEVICE = 'ttyUSB3'
 SERIAL_DEVICE_PATH = '/dev/{}'.format(SERIAL_DEVICE)
 SERIAL_DEVICE_RESET_PATH = '/dev/ttyUSB2'
@@ -37,6 +37,62 @@ auth = HTTPBasicAuth()
 
 # Read config file
 app.config.from_object('config')
+
+
+def get_creg():
+    try:
+        with SLOCK.acquire(timeout=20):
+            try:
+                with serial.Serial(SERIAL_DEVICE_PATH, timeout=1) as device:
+                    device.write(b'AT+CREG?\r\n')
+                    creg = device.readline()
+                    if creg.startswith(b'AT'):  # echo
+                        creg = device.readline()
+                    ok = device.readline().strip()
+                    return creg, ok
+            except serial.SerialException as e:
+                app.logger.warning("unable to read from serial device: %s", e)
+                return None, False
+    except filelock.Timeout as e:
+        app.logger.warning("couldn't obtain lock for serial device: %s", e)
+        return None, False
+
+
+def get_csq():
+    try:
+        with SLOCK.acquire(timeout=20):
+            try:
+                with serial.Serial(SERIAL_DEVICE_PATH, timeout=1) as device:
+                    device.write(b'AT+CSQ\r\n')
+                    csq = device.readline()
+                    if csq.startswith(b'AT'):  # we got an echo
+                        csq = device.readline()
+                    ok = device.readline().strip()
+                    return csq, ok
+            except serial.SerialException as e:
+                app.logger.warning("unable to read from serial device: %s", e)
+                return 0, False
+    except filelock.Timeout as e:
+        app.logger.warning("couldn't obtain lock for serial device: %s", e)
+        return 0, False
+
+
+def parse_csq(csq):
+    csq_match = CSQ_REGEX.match(csq)
+    if csq_match is None:
+        app.logger.info("csq ( {} ) didn't match regex ( {} )".format(csq, CSQ_REGEX.pattern))
+        return 0
+    else:
+        return int(csq_match.group(1) or 0)
+
+
+def parse_creg(creg):
+    creg_match = CREG_REGEX.match(creg)
+    if creg_match is None:
+        app.logger.info("creg ( %s ) didn't match regex ( %s )", creg, CREG_REGEX.pattern)
+        return -1
+    else:
+        return int(creg_match.group(1) or -1)
 
 
 def get_modem_reset_file():
@@ -270,40 +326,26 @@ def simple_send_sms():
 @app.route('/api/v1.0/sms/modem_status', methods=['GET'])
 @auth.login_required
 def modem_status():
-    csq = None
-    try:
-        with SLOCK.acquire(timeout=20):
-            try:
-                with serial.Serial(SERIAL_DEVICE_PATH, timeout=1) as device:
-                    device.write(b'AT+CSQ\r\n')
-                    csq = device.readline()
-                    if csq.startswith(b'AT'):  # we got an echo
-                        csq = device.readline()
-                    ok = device.readline().strip()
-            except serial.SerialException as e:
-                app.logger.warning("unable to read from serial device: %s", e)
-                ok = False
-    except filelock.Timeout as e:
-        app.logger.warning("couldn't obtain lock for serial device: %s", e)
-        ok = False
+    csq, ok = get_csq()
 
     if not ok:
         return jsonify({'error': 'modem not available'}), 500
 
-    csq_match = CSQ_REGEX.match(csq)
-    if csq_match is None:
-        app.logger.info("csq ( {} ) didn't match regex ( {} )".format(csq, CSQ_REGEX.pattern))
-        csq_status = 0
-    else:
-        csq_status = int(CSQ_REGEX.match(csq).group(1) or 0)
+    csq_status = parse_csq(csq)
 
-    if 10 <= csq_status < 99:
-        return jsonify({'result': 'All OK'}), 200
-    else:
+    if not 10 <= csq_status < 99:
         app.logger.warning("CSQ result: %s", csq)
         if csq_status == 99:
             reset_modem()
         return jsonify({'error': 'modem not connected or weak signal'}), 500
+
+    creg, ok = get_creg()
+    if not ok:
+        return jsonify({'error': 'modem not available'}), 500
+
+    creg_status = parse_creg(creg)
+    if creg_status not in (1, 5):
+        return jsonify({'error': 'registration problem'}), 500
 
 
 @app.route('/api/v1.0/sms/smsd_status', methods=['GET'])
